@@ -1,6 +1,6 @@
 // Arrabona Pass Mobil - offline mukodes. A sajat fajljain kivul semmit nem tolt le.
 // Halozat elsobbseg (igy a frissites azonnal megjelenik), halozat nelkul a tarolt peldany.
-const CACHE = "apm-1.1.0";
+const CACHE = "apm-1.1.1";
 const FILES = ["./", "index.html", "app.js", "argon2.js", "app.css", "manifest.webmanifest",
                "icon-180.png", "icon-192.png", "icon-512.png", "logo-64.png"];
 

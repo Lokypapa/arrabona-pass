@@ -3,7 +3,7 @@
 // internet nelkul: Argon2id (argon2.js) -> AES-256-GCM (WebCrypto). Az app semmit nem kuld sehova.
 "use strict";
 
-const APP_VERSION = "1.1.0";
+const APP_VERSION = "1.1.1";
 const MAGIC = new TextEncoder().encode("ARRABONAPASS\x01");
 const MAX_HEADER = 4096;
 
@@ -778,7 +778,7 @@ if (typeof document !== "undefined") (function () {
     else if (act === "export") exportToPc();
     else if (act === "forget") {
       const warn = S.vault && S.vault.edited ? "\n\nFIGYELEM: a telefonon végzett, a gép által még át nem vett változások elvesznek!" : "";
-      if (confirm("Törlöd a trezort erről a telefonról? (A gépen és a Proton Drive-on megmarad.)" + warn)) {
+      if (confirm("Törlöd a trezort erről a telefonról? (A gépen és a szinkronizált mappában megmarad.)" + warn)) {
         DB.del("vault").then(() => DB.del("incoming")).then(() => Hello.disable()).then(() => { S.vault = null; lock(true); toast("Törölve."); });
       }
     }

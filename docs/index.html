@@ -31,8 +31,8 @@
     <div id="lock-novault">
       <p>Még nincs trezor ezen a telefonon.</p>
       <p class="soft small">A gépen a Pass Beállítások → Mentés fülén kapcsold be a
-        <b>Telefonos másolatot</b> a Proton Drive mappádba. Utána itt koppints a gombra, és a
-        Fájlok appban válaszd ki: Proton Drive → <b>ArrabonaPass_mobil.apv</b>.</p>
+        <b>Telefonos másolatot</b> egy szinkronizált mappába (pl. Dropbox). Utána itt koppints a gombra, és a
+        Fájlok appban válaszd ki ugyanebből a mappából: <b>ArrabonaPass_mobil.apv</b>.</p>
       <button class="btn primary big" data-act="pick">Trezor betöltése</button>
     </div>
 
@@ -60,7 +60,7 @@
   </header>
   <div class="syncbar" id="syncbar" hidden>
     <span id="syncbar-t"></span>
-    <button class="mini on" data-act="export">Mentés a Proton Drive-ra</button>
+    <button class="mini on" data-act="export">Küldés a gépre</button>
   </div>
   <nav class="chips" id="chips"></nav>
   <div class="catrow" id="catrow"><select id="cat"></select><span class="soft small" id="count"></span></div>
@@ -131,15 +131,15 @@
     </div>
     <div class="card">
       <p><b>Szinkron a géppel</b></p>
-      <p class="soft small">A telefonon végzett változásokat a „Mentés a Proton Drive-ra” gombbal küldöd a gépre:
-        a megosztás ablakban „Mentés a Fájlokba” → Proton Drive → My files (ha kérdezi: Csere). A gépen futó,
+      <p class="soft small">A telefonon végzett változásokat a „Küldés a gépre” gombbal küldöd át:
+        a megosztás ablakban „Mentés a Fájlokba” → a szinkronizált mappád (pl. Dropbox → ArrabonaPass; ha kérdezi: Csere). A gépen futó,
         feloldott Pass pár másodpercen belül átveszi. A gép változásait a „Trezor frissítése” gombbal hozod át –
         a telefonos változások ilyenkor sem vesznek el.</p>
     </div>
     <div class="card">
       <p><b>Trezor ezen a telefonon</b></p>
       <p class="soft small" id="s-vault"></p>
-      <button class="btn" data-act="pick">Trezor frissítése a Proton Drive-ról</button>
+      <button class="btn" data-act="pick">Trezor frissítése a gépről</button>
       <button class="btn danger" data-act="forget">Trezor törlése erről a telefonról</button>
     </div>
     <p class="soft small center" id="s-ver"></p>
