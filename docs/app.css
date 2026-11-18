@@ -100,3 +100,21 @@ label.row input[type=checkbox] { width: 26px; height: 26px; accent-color: var(--
   align-items: center; justify-content: center; }
 #privacy img { width: 96px; border-radius: 22px; opacity: .8; }
 body.covered #privacy { display: flex; }
+
+/* [v1.1.0] szerkesztes */
+.syncbar { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 6px 0 2px;
+  background: #2a2417; border: 1px solid #6b5520; color: #f5d78e; border-radius: 12px; padding: 8px 10px; font-size: 14px; }
+.actions { margin-top: 4px; }
+.two { display: flex; gap: 8px; } .two .btn { margin-top: 0; }
+.icon.save { background: var(--brand); border-color: var(--brand); color: #fff; }
+.ef { padding: 10px 0; border-top: 1px solid var(--div); }
+.ef:first-child { border-top: 0; }
+.ef label { display: block; color: var(--soft); font-size: 13px; margin-bottom: 4px; }
+.ef .f-row input { flex: 1; min-width: 0; }
+.ef textarea { width: 100%; min-height: 160px; background: var(--bg); color: var(--text); border: 1px solid var(--div);
+  border-radius: 12px; padding: 12px; font: inherit; font-size: 16px; resize: vertical; }
+.ef input[type=text], .ef input[type=password], .ef input[type=search] { background: var(--bg); font-size: 16px; }
+.ef .chk { display: flex; justify-content: space-between; align-items: center; color: var(--text); font-size: 16px; }
+.ef .chk input { width: 26px; height: 26px; accent-color: var(--brand); }
+.sheet { position: fixed; inset: 0; background: rgba(0,0,0,.55); z-index: 30; display: flex; align-items: flex-end; }
+.sheet-box { width: 100%; background: var(--panel); border-radius: 18px 18px 0 0; padding: 10px 14px calc(var(--sb) + 14px); }

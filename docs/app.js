@@ -3,7 +3,7 @@
 // internet nelkul: Argon2id (argon2.js) -> AES-256-GCM (WebCrypto). Az app semmit nem kuld sehova.
 "use strict";
 
-const APP_VERSION = "1.0.0";
+const APP_VERSION = "1.1.0";
 const MAGIC = new TextEncoder().encode("ARRABONAPASS\x01");
 const MAX_HEADER = 4096;
 
@@ -58,6 +58,58 @@ async function decryptVault(parsed, rawKey) {
 }
 
 // ======================================================================
+//  [v1.1.0] Mentes (ugyanazzal a kulccsal es fejleccel) + osszefesules
+//  Az osszefesules ugyanaz, mint a Pass apass/sync.py merge_data-ja.
+// ======================================================================
+async function encryptVault(data, aad, rawKey) {
+  const key = await crypto.subtle.importKey("raw", rawKey, "AES-GCM", false, ["encrypt"]);
+  const nonce = crypto.getRandomValues(new Uint8Array(12));
+  const ct = new Uint8Array(await crypto.subtle.encrypt({ name: "AES-GCM", iv: nonce, additionalData: aad,
+                                                         tagLength: 128 }, key, new TextEncoder().encode(JSON.stringify(data))));
+  const out = new Uint8Array(aad.length + 12 + ct.length);
+  out.set(aad, 0); out.set(nonce, aad.length); out.set(ct, aad.length + 12);
+  return out;
+}
+function nowTs() {
+  const d = new Date(), z = n => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${z(d.getMonth() + 1)}-${z(d.getDate())} ${z(d.getHours())}:${z(d.getMinutes())}:${z(d.getSeconds())}`;
+}
+function newId() { return [...crypto.getRandomValues(new Uint8Array(16))].map(b => b.toString(16).padStart(2, "0")).join(""); }
+function sameEntry(a, b) {
+  const clean = o => JSON.stringify(Object.keys(o).filter(k => !k.startsWith("_")).sort().map(k => [k, o[k]]));
+  return clean(a) === clean(b);
+}
+function mergeData(base, other) {
+  const out = JSON.parse(JSON.stringify(base));
+  const tomb = {};
+  for (const src of [base.deleted || [], other.deleted || []])
+    for (const t of src) if (t && t.id && String(t.ts || "") > (tomb[t.id] || "")) tomb[t.id] = String(t.ts || "");
+  const A = new Map(), B = new Map();
+  for (const e of base.entries || []) if (e.id) A.set(e.id, e);
+  for (const e of other.entries || []) if (e.id) B.set(e.id, e);
+  const order = [...A.keys(), ...[...B.keys()].filter(i => !A.has(i))];
+  const stats = { added: 0, updated: 0, removed: 0 }, entries = [];
+  for (const i of order) {
+    const a = A.get(i), b = B.get(i);
+    const cand = a && b ? (String(b.modified || "") > String(a.modified || "") ? b : a) : (a || b);
+    if (i in tomb && tomb[i] >= String(cand.modified || "")) { if (a) stats.removed++; continue; }
+    if (!a) stats.added++;
+    else if (cand === b && !sameEntry(a, b)) stats.updated++;
+    entries.push(JSON.parse(JSON.stringify(cand)));
+  }
+  out.entries = entries;
+  const used = new Set(entries.map(e => e.category).filter(Boolean));
+  const cats = [];
+  for (const c of [...(base.categories || []), ...(other.categories || []).filter(c => used.has(c))])
+    if (c && !cats.includes(c)) cats.push(c);
+  out.categories = cats;
+  const limit = Date.now() - 365 * 864e5;
+  out.deleted = Object.entries(tomb).filter(([, t]) => { const d = parseTs(t); return d && d.getTime() >= limit; })
+    .sort((x, y) => (x[1] < y[1] ? 1 : -1)).slice(0, 2000).map(([id, ts]) => ({ id, ts }));
+  return [out, stats];
+}
+
+// ======================================================================
 //  Jelszokor, kartyalejarat (a Pass health.py-ja szerint)
 // ======================================================================
 function parseTs(ts) {
@@ -92,7 +144,8 @@ function cardStatus(exp, warnDays) {
 }
 
 if (typeof module !== "undefined") {    // node-os teszt
-  module.exports = { parseVault, deriveKey, decryptVault, humanAge, cardStatus, passwordDate };
+  module.exports = { parseVault, deriveKey, decryptVault, humanAge, cardStatus, passwordDate,
+                     encryptVault, mergeData, nowTs };
 }
 
 // ======================================================================
@@ -214,7 +267,7 @@ if (typeof document !== "undefined") (function () {
     clearTimeout(toastT); toastT = setTimeout(() => { t.hidden = true; }, ms);
   }
   function show(view) {
-    for (const v of ["v-lock", "v-list", "v-detail", "v-settings"]) $(v).hidden = v !== view;
+    for (const v of ["v-lock", "v-list", "v-detail", "v-settings", "v-edit"]) $(v).hidden = v !== view;
     window.scrollTo(0, 0);
   }
   const PALETTE = ["#e74c3c", "#e67e22", "#d4a017", "#27ae60", "#16a085", "#2980b9", "#8e44ad",
@@ -249,7 +302,8 @@ if (typeof document !== "undefined") (function () {
     $("lock-form").hidden = !S.vault;
     $("b-faceid").hidden = !(S.vault && hello);
     $("lock-info").textContent = S.vault
-      ? `Trezor: ${S.vault.name} · mentve ${fmtDate(S.vault.modified)}` : "Mobil · csak olvasható";
+      ? `Trezor: ${S.vault.name} · mentve ${fmtDate(S.vault.modified)}` +
+        (S.vault.dirty ? " · ⚠ el nem küldött telefonos változások" : "") : "Mobil";
     $("lock-err").textContent = "";
   }
   $("file").addEventListener("change", async ev => {
@@ -261,6 +315,20 @@ if (typeof document !== "undefined") (function () {
       const raw = new Uint8Array(await f.arrayBuffer());
       const parsed = parseVault(raw);
       const old = await DB.get("vault");
+      if (old && old.edited) {                   // [v1.1.0] telefonos valtozasok: osszefesules
+        if (S.data && S.parsed && S.parsed.hdr.salt === parsed.hdr.salt) {
+          await mergeIncoming(raw, f);
+          return;
+        }
+        if (parseVault(old.raw).hdr.salt === parsed.hdr.salt) {
+          await DB.set("incoming", { raw, name: f.name, modified: f.lastModified || Date.now() });
+          toast("Betöltve – feloldás után összefésülöm a telefonos változásaiddal.", 4000);
+          lock(true);
+          return;
+        }
+        if (!confirm("Ez a trezor új mesterjelszóval készült, ezért nem tudom összefésülni a telefonon végzett, " +
+                     "még át nem vett változásokkal. Ha betöltöd, azok elvesznek a telefonról. Betöltsem?")) return;
+      }
       await DB.set("vault", { raw, name: f.name, modified: f.lastModified || Date.now(), loaded: Date.now() });
       const hello = await DB.get("hello");
       if (hello && hello.vaultSalt !== parsed.hdr.salt) {        // uj mesterjelszo a gepen
@@ -284,6 +352,8 @@ if (typeof document !== "undefined") (function () {
     S.parsed = parsed;
     S.key = rawKey;
     S.lastAct = Date.now();
+    const inc = await DB.get("incoming");         // [v1.1.0] zarolva betoltott gepi trezor
+    if (inc) { await DB.del("incoming"); try { await mergeIncoming(inc.raw, inc, true); } catch (e) { toast("Összefésülés: " + e.message, 4000); } }
     $("pw").value = "";
     S.filter = ["all"]; S.cat = ""; S.q = ""; $("q").value = "";
     renderList(); show("v-list");
@@ -318,10 +388,169 @@ if (typeof document !== "undefined") (function () {
     }
   }
 
+  // ---------- [v1.1.0] mentes, osszefesules, kuldes a gepre ----------
+  async function persist(msg) {
+    S.data.modified = nowTs();
+    const raw = await encryptVault(S.data, S.parsed.aad, S.key);
+    S.vault = Object.assign({}, S.vault, { raw, edited: true, dirty: true, changes: (S.vault.changes || 0) + 1 });
+    await DB.set("vault", S.vault);
+    S.parsed = parseVault(raw);
+    renderSyncbar();
+    if (msg) toast(msg);
+  }
+  async function mergeIncoming(raw, meta, quiet) {
+    const parsed = parseVault(raw);
+    const pc = await decryptVault(parsed, S.key);
+    const [merged, st] = mergeData(S.data, pc);
+    const [, back] = mergeData(pc, S.data);          // van-e meg olyan, amit a gep nem kapott meg?
+    const pending = back.added + back.updated + back.removed > 0;
+    S.data = merged;
+    S.data.modified = nowTs();
+    const enc = await encryptVault(S.data, S.parsed.aad, S.key);
+    S.vault = Object.assign({}, S.vault, { raw: enc, name: meta.name || S.vault.name,
+      modified: meta.lastModified || meta.modified || Date.now(), loaded: Date.now(),
+      edited: pending, dirty: pending && S.vault.dirty, changes: pending ? S.vault.changes : 0 });
+    await DB.set("vault", S.vault);
+    S.parsed = parseVault(enc);
+    renderList();
+    const t = `Gépről: ${st.added} új, ${st.updated} módosított, ${st.removed} törölt.`;
+    toast(pending ? t + " A telefonos változásaidat küldd el a gépre." : t + " Minden szinkronban.", 4500);
+    if (!quiet) show("v-list");
+  }
+  function renderSyncbar() {
+    const v = S.vault || {};
+    $("syncbar").hidden = !(S.data && v.dirty);
+    $("syncbar-t").textContent = `${v.changes || 1} változás a telefonon`;
+  }
+  async function exportToPc() {
+    const file = new File([S.vault.raw], "ArrabonaPass_telefon.apv", { type: "application/octet-stream" });
+    try {
+      if (navigator.canShare && navigator.canShare({ files: [file] })) {
+        await navigator.share({ files: [file], title: "ArrabonaPass_telefon.apv" });
+      } else {
+        const a = el("a", { href: URL.createObjectURL(file), download: file.name });
+        document.body.append(a); a.click(); a.remove();
+      }
+    } catch (e) {
+      if (e.name === "AbortError") { toast("Megszakítva – a változások a telefonon maradtak."); return; }
+      toast("Nem sikerült: " + e.message, 4000); return;
+    }
+    S.vault = Object.assign({}, S.vault, { dirty: false, exportedAt: Date.now() });
+    await DB.set("vault", S.vault);
+    renderSyncbar();
+    toast("Kész – a gépen futó Pass pár másodpercen belül átveszi.", 4000);
+  }
+
+  // ---------- [v1.1.0] szerkesztes ----------
+  function genPassword(n = 20) {
+    const cs = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!#$%&*+-=?@_";
+    const out = []; const buf = new Uint32Array(1);
+    while (out.length < n) { crypto.getRandomValues(buf); if (buf[0] < Math.floor(2 ** 32 / cs.length) * cs.length) out.push(cs[buf[0] % cs.length]); }
+    return out.join("");
+  }
+  function normExp(v) {
+    v = (v || "").replace(/\s/g, ""); if (!v) return "";
+    const m = /^(\d{1,2})[\/.\-]?(\d{2}|\d{4})$/.exec(v); if (!m || +m[1] < 1 || +m[1] > 12) return null;
+    return String(+m[1]).padStart(2, "0") + "/" + m[2].slice(-2);
+  }
+  function openEditor(e, type) {
+    const isNew = !e;
+    const t = isNew ? type : e.type;
+    S.editing = { isNew, id: e && e.id, type: t };
+    const g = k => (e && e[k]) || "";
+    $("e-title").textContent = isNew ? { login: "Új bejelentkezés", note: "Új jegyzet", card: "Új bankkártya" }[t] : "Szerkesztés";
+    const inp = (name, label, val, o = {}) => {
+      const i = el("input", { type: o.secret ? "password" : "text", name, value: val, inputmode: o.mode,
+                              autocapitalize: "off", autocorrect: "off", spellcheck: "false", list: o.list });
+      const extra = [];
+      if (o.secret) extra.push(el("button", { type: "button", class: "mini", onclick: ev => {
+        i.type = i.type === "password" ? "text" : "password"; ev.target.textContent = i.type === "text" ? "Elrejt" : "Mutat"; } }, "Mutat"));
+      if (o.gen) extra.push(el("button", { type: "button", class: "mini", onclick: () => { i.value = genPassword(); i.type = "text"; } }, "Generál"));
+      return el("div", { class: "ef" }, el("label", {}, label), el("div", { class: "f-row" }, i, ...extra));
+    };
+    const kids = [inp("title", "Név *", g("title"))];
+    if (t === "login") {
+      kids.push(inp("username", "Felhasználónév", g("username")), inp("password", "Jelszó", g("password"), { secret: true, gen: true }),
+                inp("url", "Weboldal", g("url"), { mode: "url" }));
+    } else if (t === "card") {
+      kids.push(inp("card_holder", "Kártyabirtokos", g("card_holder")),
+                inp("card_number", "Kártyaszám", g("card_number").replace(/(.{4})/g, "$1 ").trim(), { secret: true, mode: "numeric" }),
+                inp("card_exp", "Lejárat (HH/ÉÉ)", g("card_exp"), { mode: "numeric" }),
+                inp("card_cvv", "CVC", g("card_cvv"), { secret: true, mode: "numeric" }),
+                inp("card_pin", "PIN (nem kötelező)", g("card_pin"), { secret: true, mode: "numeric" }));
+    }
+    const ta = el("textarea", { name: "notes" }); ta.value = g("notes");
+    kids.push(el("div", { class: "ef" }, el("label", {}, t === "note" ? "Tartalom" : "Megjegyzés"), ta));
+    const cats = [...new Set([...(S.data.categories || []), ...S.data.entries.map(x => x.category)].filter(Boolean))];
+    $("cat-list").replaceChildren(...cats.map(c => el("option", { value: c })));
+    kids.push(inp("category", "Kategória", isNew ? (S.cat && S.cat !== "\u0000" ? S.cat : "") : g("category"), { list: "cat-list" }));
+    const fav = el("input", { type: "checkbox", name: "favorite" }); fav.checked = isNew ? S.filter[0] === "fav" : !!e.favorite;
+    kids.push(el("div", { class: "ef" }, el("label", { class: "chk" }, "★ Kedvenc", fav)));
+    kids.push(el("p", { class: "err", id: "e-err" }));
+    $("e-form").replaceChildren(el("div", { class: "card" }, ...kids));
+    show("v-edit");
+    if (isNew) setTimeout(() => $("e-form").elements.title.focus(), 50);
+  }
+  async function saveEditor() {
+    const f = $("e-form").elements, ed = S.editing, err = $("e-err");
+    const val = k => (f[k] ? f[k].value : "").trim();
+    const title = val("title");
+    if (!title) { err.textContent = "Adj nevet a bejegyzésnek."; return; }
+    const fields = { title, notes: f.notes.value.replace(/\s+$/, ""), category: val("category").replace(/\s+/g, " ").slice(0, 40),
+                     favorite: f.favorite.checked };
+    if (ed.type === "login") Object.assign(fields, { username: val("username"), password: f.password.value, url: val("url") });
+    if (ed.type === "card") {
+      const num = val("card_number").replace(/\D/g, ""), exp = normExp(val("card_exp"));
+      const cvv = val("card_cvv").replace(/\D/g, ""), pin = val("card_pin").replace(/\D/g, "");
+      if (num && (num.length < 12 || num.length > 19)) { err.textContent = "A kártyaszám 12–19 számjegy."; return; }
+      if (exp === null) { err.textContent = "A lejárat HH/ÉÉ alakú legyen (pl. 08/27)."; return; }
+      if (cvv && (cvv.length < 3 || cvv.length > 4)) { err.textContent = "A CVC 3 vagy 4 számjegy."; return; }
+      Object.assign(fields, { card_holder: val("card_holder"), card_number: num, card_exp: exp, card_cvv: cvv, card_pin: pin });
+    }
+    const now = nowTs();
+    let e;
+    if (ed.isNew) {
+      e = Object.assign({ id: newId(), type: ed.type, title: "", username: "", password: "", url: "", notes: "",
+                          category: "", favorite: false, created: now }, fields);
+      if (ed.type === "login") e.pw_changed = now;
+      S.data.entries.push(e);
+    } else {
+      e = S.data.entries.find(x => x.id === ed.id);
+      if (!e) { err.textContent = "A bejegyzés közben eltűnt."; return; }
+      if (ed.type === "login" && e.password && fields.password !== e.password) {
+        e.history = [{ password: e.password, changed: now }, ...(e.history || [])].slice(0, 5);
+        e.pw_changed = now;
+      } else if (ed.type === "login" && !e.password && fields.password) e.pw_changed = now;
+      Object.assign(e, fields);
+    }
+    e.modified = now;
+    if (e.category && !(S.data.categories || []).includes(e.category)) (S.data.categories = S.data.categories || []).push(e.category);
+    try { await persist("Mentve a telefonon."); } catch (x) { err.textContent = "Mentési hiba: " + x.message; return; }
+    S.editing = null;
+    openDetail(e);
+  }
+  async function deleteCurrent() {
+    const e = S.current; if (!e) return;
+    if (!confirm(`Törlöd ezt a bejegyzést?\n\n${e.title}`)) return;
+    S.data.entries = S.data.entries.filter(x => x.id !== e.id);
+    (S.data.deleted = S.data.deleted || []).push({ id: e.id, ts: nowTs() });
+    await persist("Törölve.");
+    S.current = null; renderList(); show("v-list");
+  }
+  async function toggleFav() {
+    const e = S.current; if (!e) return;
+    e.favorite = !e.favorite; e.modified = nowTs();
+    await persist(e.favorite ? "Kedvencekhez adva." : "Levéve a kedvencekről.");
+    $("d-fav").textContent = e.favorite ? "☆ Nem kedvenc" : "★ Kedvenc";
+  }
+
+  $("e-form").addEventListener("submit", ev => { ev.preventDefault(); saveEditor(); });
+
   // ---------- zarolas ----------
   function lock(silent) {
     clearClipSoon(true);
-    S.data = null; S.parsed = null; S.key = null; S.current = null;
+    S.data = null; S.parsed = null; S.key = null; S.current = null; S.editing = null;
+    $("e-form").replaceChildren(); $("sheet").hidden = true;
     $("list").replaceChildren(); $("d-body").replaceChildren();
     refreshLockScreen().then(() => {
       show("v-lock");
@@ -439,6 +668,7 @@ if (typeof document !== "undefined") (function () {
       }));
     }
     $("count").textContent = `${items.length} db`;
+    renderSyncbar();
     $("synced").textContent = `Trezor: mentve ${fmtDate(S.vault.modified)} · betöltve ${fmtDate(S.vault.loaded)}`;
   }
   $("q").addEventListener("input", () => { S.q = $("q").value.trim().toLowerCase(); renderList(); });
@@ -493,6 +723,7 @@ if (typeof document !== "undefined") (function () {
                   e.modified ? "Módosítva: " + e.modified.slice(0, 10) : ""].filter(Boolean).join(" · ");
     if (meta) parts.push(el("p", { class: "soft small center" }, meta));
     $("d-body").replaceChildren(...parts);
+    $("d-fav").textContent = e.favorite ? "☆ Nem kedvenc" : "★ Kedvenc";
     show("v-detail");
   }
 
@@ -507,7 +738,7 @@ if (typeof document !== "undefined") (function () {
       : "Ez a böngésző nem támogatja.";
     $("s-vault").textContent = S.vault
       ? `${S.vault.name} · mentve ${fmtDate(S.vault.modified)} · betöltve ${fmtDate(S.vault.loaded)} · ${Math.round(S.vault.raw.length / 1024)} KB` : "";
-    $("s-ver").textContent = `Arrabona Pass Mobil v${APP_VERSION} · csak olvasható`;
+    $("s-ver").textContent = `Arrabona Pass Mobil v${APP_VERSION}`;
     show("v-settings");
   }
   $("s-faceid").addEventListener("change", async ev => {
@@ -535,10 +766,20 @@ if (typeof document !== "undefined") (function () {
     else if (act === "faceid") faceUnlock();
     else if (act === "lock") lock(true);
     else if (act === "settings") openSettings();
-    else if (act === "back") { S.current = null; $("d-body").replaceChildren(); renderList(); show("v-list"); }
+    else if (act === "back") { S.current = null; $("d-body").replaceChildren(); if (S.data) { renderList(); show("v-list"); } }
+    else if (act === "new") $("sheet").hidden = false;
+    else if (act === "sheet-close") $("sheet").hidden = true;
+    else if (act.startsWith("new-")) { $("sheet").hidden = true; openEditor(null, act.slice(4)); }
+    else if (act === "edit") { if (S.current) openEditor(S.current); }
+    else if (act === "cancel-edit") { const c = S.editing && !S.editing.isNew ? S.current : null; S.editing = null; c ? openDetail(c) : (renderList(), show("v-list")); }
+    else if (act === "save-edit") saveEditor();
+    else if (act === "delete") deleteCurrent();
+    else if (act === "fav") toggleFav();
+    else if (act === "export") exportToPc();
     else if (act === "forget") {
-      if (confirm("Törlöd a trezort erről a telefonról? (A gépen és a Proton Drive-on megmarad.)")) {
-        DB.del("vault").then(() => Hello.disable()).then(() => { S.vault = null; lock(true); toast("Törölve."); });
+      const warn = S.vault && S.vault.edited ? "\n\nFIGYELEM: a telefonon végzett, a gép által még át nem vett változások elvesznek!" : "";
+      if (confirm("Törlöd a trezort erről a telefonról? (A gépen és a Proton Drive-on megmarad.)" + warn)) {
+        DB.del("vault").then(() => DB.del("incoming")).then(() => Hello.disable()).then(() => { S.vault = null; lock(true); toast("Törölve."); });
       }
     }
   });

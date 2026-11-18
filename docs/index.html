@@ -26,7 +26,7 @@
   <div class="lock-box">
     <img class="logo" src="icon-192.png" alt="">
     <h1>Arrabona Pass</h1>
-    <p class="soft" id="lock-info">Mobil · csak olvasható</p>
+    <p class="soft" id="lock-info">Mobil</p>
 
     <div id="lock-novault">
       <p>Még nincs trezor ezen a telefonon.</p>
@@ -54,9 +54,14 @@
   <header class="top">
     <input type="search" id="q" placeholder="Keresés…" autocomplete="off" autocapitalize="off"
            autocorrect="off" spellcheck="false" enterkeyhint="search">
+    <button class="icon" data-act="new" aria-label="Új bejegyzés">＋</button>
     <button class="icon" data-act="settings" aria-label="Beállítások">⚙</button>
     <button class="icon lockbtn" data-act="lock" aria-label="Zárolás">🔒</button>
   </header>
+  <div class="syncbar" id="syncbar" hidden>
+    <span id="syncbar-t"></span>
+    <button class="mini on" data-act="export">Mentés a Proton Drive-ra</button>
+  </div>
   <nav class="chips" id="chips"></nav>
   <div class="catrow" id="catrow"><select id="cat"></select><span class="soft small" id="count"></span></div>
   <ul class="list" id="list"></ul>
@@ -71,7 +76,34 @@
     <button class="icon lockbtn" data-act="lock" aria-label="Zárolás">🔒</button>
   </header>
   <div id="d-body" class="detail"></div>
+  <div class="detail actions">
+    <button class="btn" data-act="edit">Szerkesztés</button>
+    <div class="two"><button class="btn" data-act="fav" id="d-fav">★ Kedvenc</button>
+      <button class="btn danger" data-act="delete">Törlés</button></div>
+  </div>
 </section>
+
+<!-- ============ szerkesztes ============ -->
+<section id="v-edit" class="view" hidden>
+  <header class="top">
+    <button class="icon" data-act="cancel-edit" aria-label="Mégse">✕</button>
+    <h2 id="e-title">Szerkesztés</h2>
+    <button class="icon save" data-act="save-edit" aria-label="Mentés">✓</button>
+  </header>
+  <form id="e-form" class="detail" autocomplete="off"></form>
+  <datalist id="cat-list"></datalist>
+</section>
+
+<!-- ============ uj bejegyzes tipusa ============ -->
+<div id="sheet" class="sheet" hidden>
+  <div class="sheet-box">
+    <p class="soft small center">Új bejegyzés</p>
+    <button class="btn" data-act="new-login">Bejelentkezés</button>
+    <button class="btn" data-act="new-note">Biztonságos jegyzet</button>
+    <button class="btn" data-act="new-card">Bankkártya</button>
+    <button class="btn link" data-act="sheet-close">Mégse</button>
+  </div>
+</div>
 
 <!-- ============ beallitasok ============ -->
 <section id="v-settings" class="view" hidden>
@@ -96,6 +128,13 @@
         <select id="s-clip"><option value="20">20 mp</option><option value="45">45 mp</option>
           <option value="0">soha</option></select></label>
       <p class="soft small">Az iPhone csak akkor engedi törölni a vágólapot, ha az app épp előtérben van.</p>
+    </div>
+    <div class="card">
+      <p><b>Szinkron a géppel</b></p>
+      <p class="soft small">A telefonon végzett változásokat a „Mentés a Proton Drive-ra” gombbal küldöd a gépre:
+        a megosztás ablakban „Mentés a Fájlokba” → Proton Drive → My files (ha kérdezi: Csere). A gépen futó,
+        feloldott Pass pár másodpercen belül átveszi. A gép változásait a „Trezor frissítése” gombbal hozod át –
+        a telefonos változások ilyenkor sem vesznek el.</p>
     </div>
     <div class="card">
       <p><b>Trezor ezen a telefonon</b></p>
