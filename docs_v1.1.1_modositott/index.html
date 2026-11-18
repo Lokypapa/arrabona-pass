@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="hu">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; font-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'">
+<meta name="referrer" content="no-referrer">
+<meta name="theme-color" content="#16161c">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Arrabona Pass">
+<meta name="format-detection" content="telephone=no">
+<title>Arrabona Pass Mobil</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="icon" href="logo-64.png">
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
+<div id="privacy"><img src="icon-192.png" alt=""></div>
+
+<!-- ============ betoltes / feloldas ============ -->
+<section id="v-lock" class="view">
+  <div class="lock-box">
+    <img class="logo" src="icon-192.png" alt="">
+    <h1>Arrabona Pass</h1>
+    <p class="soft" id="lock-info">Mobil</p>
+
+    <div id="lock-novault">
+      <p>Még nincs trezor ezen a telefonon.</p>
+      <p class="soft small">A gépen a Pass Beállítások → Mentés fülén kapcsold be a
+        <b>Telefonos másolatot</b> egy szinkronizált mappába (pl. Dropbox). Utána itt koppints a gombra, és a
+        Fájlok appban válaszd ki ugyanebből a mappából: <b>ArrabonaPass_mobil.apv</b>.</p>
+      <button class="btn primary big" data-act="pick">Trezor betöltése</button>
+    </div>
+
+    <form id="lock-form" autocomplete="off">
+      <input type="password" id="pw" placeholder="Mesterjelszó" autocomplete="current-password"
+             autocapitalize="off" autocorrect="off" spellcheck="false" enterkeyhint="go">
+      <button class="btn primary big" type="submit" id="b-unlock">Feloldás</button>
+      <button class="btn big" type="button" id="b-faceid" data-act="faceid" hidden>Feloldás Face ID-val</button>
+      <div class="progress" id="prog" hidden><div></div></div>
+      <p class="err" id="lock-err"></p>
+      <button class="btn link" type="button" data-act="pick">Trezor frissítése / másik trezor</button>
+    </form>
+  </div>
+  <input type="file" id="file" hidden>
+</section>
+
+<!-- ============ lista ============ -->
+<section id="v-list" class="view" hidden>
+  <header class="top">
+    <input type="search" id="q" placeholder="Keresés…" autocomplete="off" autocapitalize="off"
+           autocorrect="off" spellcheck="false" enterkeyhint="search">
+    <button class="icon" data-act="new" aria-label="Új bejegyzés">＋</button>
+    <button class="icon" data-act="settings" aria-label="Beállítások">⚙</button>
+    <button class="icon lockbtn" data-act="lock" aria-label="Zárolás">🔒</button>
+  </header>
+  <div class="syncbar" id="syncbar" hidden>
+    <span id="syncbar-t"></span>
+    <button class="mini on" data-act="export">Küldés a gépre</button>
+  </div>
+  <nav class="chips" id="chips"></nav>
+  <div class="catrow" id="catrow"><select id="cat"></select><span class="soft small" id="count"></span></div>
+  <ul class="list" id="list"></ul>
+  <p class="soft small center" id="synced"></p>
+</section>
+
+<!-- ============ reszletek ============ -->
+<section id="v-detail" class="view" hidden>
+  <header class="top">
+    <button class="icon" data-act="back" aria-label="Vissza">‹</button>
+    <h2 id="d-title"></h2>
+    <button class="icon lockbtn" data-act="lock" aria-label="Zárolás">🔒</button>
+  </header>
+  <div id="d-body" class="detail"></div>
+  <div class="detail actions">
+    <button class="btn" data-act="edit">Szerkesztés</button>
+    <div class="two"><button class="btn" data-act="fav" id="d-fav">★ Kedvenc</button>
+      <button class="btn danger" data-act="delete">Törlés</button></div>
+  </div>
+</section>
+
+<!-- ============ szerkesztes ============ -->
+<section id="v-edit" class="view" hidden>
+  <header class="top">
+    <button class="icon" data-act="cancel-edit" aria-label="Mégse">✕</button>
+    <h2 id="e-title">Szerkesztés</h2>
+    <button class="icon save" data-act="save-edit" aria-label="Mentés">✓</button>
+  </header>
+  <form id="e-form" class="detail" autocomplete="off"></form>
+  <datalist id="cat-list"></datalist>
+</section>
+
+<!-- ============ uj bejegyzes tipusa ============ -->
+<div id="sheet" class="sheet" hidden>
+  <div class="sheet-box">
+    <p class="soft small center">Új bejegyzés</p>
+    <button class="btn" data-act="new-login">Bejelentkezés</button>
+    <button class="btn" data-act="new-note">Biztonságos jegyzet</button>
+    <button class="btn" data-act="new-card">Bankkártya</button>
+    <button class="btn link" data-act="sheet-close">Mégse</button>
+  </div>
+</div>
+
+<!-- ============ beallitasok ============ -->
+<section id="v-settings" class="view" hidden>
+  <header class="top">
+    <button class="icon" data-act="back" aria-label="Vissza">‹</button>
+    <h2>Beállítások</h2>
+    <span class="icon"></span>
+  </header>
+  <div class="detail">
+    <div class="card">
+      <label class="row"><span>Face ID-s feloldás</span><input type="checkbox" id="s-faceid"></label>
+      <p class="soft small" id="s-faceid-info">Bekapcsoláskor egyszer meg kell adnod a mesterjelszót.</p>
+    </div>
+    <div class="card">
+      <label class="row"><span>Zárolás, ha elhagyod az appot</span>
+        <select id="s-hide"><option value="0">azonnal</option><option value="60">1 perc után</option>
+          <option value="300">5 perc után</option></select></label>
+      <label class="row"><span>Zárolás tétlenség után</span>
+        <select id="s-idle"><option value="60">1 perc</option><option value="180">3 perc</option>
+          <option value="600">10 perc</option></select></label>
+      <label class="row"><span>Vágólap törlése</span>
+        <select id="s-clip"><option value="20">20 mp</option><option value="45">45 mp</option>
+          <option value="0">soha</option></select></label>
+      <p class="soft small">Az iPhone csak akkor engedi törölni a vágólapot, ha az app épp előtérben van.</p>
+    </div>
+    <div class="card">
+      <p><b>Szinkron a géppel</b></p>
+      <p class="soft small">A telefonon végzett változásokat a „Küldés a gépre” gombbal küldöd át:
+        a megosztás ablakban „Mentés a Fájlokba” → a szinkronizált mappád (pl. Dropbox → ArrabonaPass; ha kérdezi: Csere). A gépen futó,
+        feloldott Pass pár másodpercen belül átveszi. A gép változásait a „Trezor frissítése” gombbal hozod át –
+        a telefonos változások ilyenkor sem vesznek el.</p>
+    </div>
+    <div class="card">
+      <p><b>Trezor ezen a telefonon</b></p>
+      <p class="soft small" id="s-vault"></p>
+      <button class="btn" data-act="pick">Trezor frissítése a gépről</button>
+      <button class="btn danger" data-act="forget">Trezor törlése erről a telefonról</button>
+    </div>
+    <p class="soft small center" id="s-ver"></p>
+  </div>
+</section>
+
+<div id="toast" hidden></div>
+<script src="argon2.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
